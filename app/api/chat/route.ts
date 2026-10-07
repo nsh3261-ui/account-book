@@ -1,4 +1,8 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import {
+  GoogleGenerativeAI,
+  SchemaType,
+  type GenerationConfig,
+} from "@google/generative-ai";
 import { supabase } from "@/lib/supabase";
 
 type ChatTurn = {
@@ -309,20 +313,7 @@ async function generateText(
   genAI: GoogleGenerativeAI,
   options: {
     systemInstruction: string;
-    generationConfig: {
-      temperature: number;
-      maxOutputTokens: number;
-      responseMimeType?: string;
-      responseSchema?: {
-        type: SchemaType;
-        properties: {
-          date: { type: SchemaType };
-          amount: { type: SchemaType };
-          description: { type: SchemaType };
-        };
-        required: string[];
-      };
-    };
+    generationConfig: GenerationConfig;
     contents: { role: "user" | "model"; parts: { text: string }[] }[];
   },
 ) {
