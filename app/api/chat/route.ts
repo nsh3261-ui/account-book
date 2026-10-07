@@ -3,6 +3,7 @@ import {
   SchemaType,
   type GenerationConfig,
 } from "@google/generative-ai";
+import { normalizeCategory, type Category } from "@/lib/categories";
 import { supabase } from "@/lib/supabase";
 
 type ChatTurn = {
@@ -14,6 +15,7 @@ type ExpenseDraft = {
   date: string;
   amount: number;
   description: string;
+  category: Category;
 };
 
 type ExpenseRecord = ExpenseDraft & {
@@ -66,6 +68,7 @@ function normalizeDraft(value: unknown): ExpenseDraft | null {
     date,
     amount: Math.round(amount),
     description,
+    category: normalizeCategory(draft.category),
   };
 }
 
@@ -106,7 +109,7 @@ async function loadAllExpenses() {
   while (true) {
     const { data, error } = await supabase
       .from("expenses")
-      .select("id, created_at, date, amount, description")
+      .select("id, created_at, date, amount, description, category")
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .range(from, from + pageSize - 1);
@@ -125,7 +128,10 @@ async function loadAllExpenses() {
 function formatLedger(rows: ExpenseRecord[]) {
   if (rows.length === 0) return "없음";
   return rows
-    .map((item) => `${item.date} | ${item.amount}원 | ${item.description}`)
+    .map(
+      (item) =>
+        `${item.date} | ${item.amount}원 | ${item.description} | ${normalizeCategory(item.category)}`,
+    )
     .join("\n");
 }
 
@@ -244,16 +250,23 @@ async function saveExpense(
     `참고용 최근 지출:\n${ledger}`,
   );
 
-  let parsed: { date?: unknown; amount?: unknown; description?: unknown };
+  let parsed: {
+    date?: unknown;
+    amount?: unknown;
+    description?: unknown;
+    category?: unknown;
+  };
   try {
     const text = await generateText(genAI, {
       systemInstruction: `가계부 문장에서 지출 정보를 추출합니다.
 오늘 날짜는 ${today}이고 어제는 ${yesterday}입니다. 시간대는 Asia/Seoul입니다.
 date는 YYYY-MM-DD, amount는 원 단위 정수, description은 짧은 지출 내용입니다.
+category는 반드시 다음 중 하나입니다: 식비, 교통, 쇼핑, 문화, 기타.
+예: 점심/커피/식당=식비, 버스/택시/지하철=교통, 옷/마트/쿠팡=쇼핑, 영화/공연/책=문화, 그 외=기타.
 "2만 원"은 20000처럼 숫자로 바꿉니다.
-날짜를 모르면 date는 빈 문자열, 금액을 모르면 amount는 0, 내용을 모르면 description은 빈 문자열입니다.
-지출이 아닌 문장이면 세 필드를 모두 비웁니다.
-JSON만 반환합니다. { "date": "", "amount": 0, "description": "" }`,
+날짜를 모르면 date는 빈 문자열, 금액을 모르면 amount는 0, 내용을 모르면 description은 빈 문자열, category는 기타입니다.
+지출이 아닌 문장이면 date/description은 빈 문자열, amount는 0, category는 기타입니다.
+JSON만 반환합니다. { "date": "", "amount": 0, "description": "", "category": "기타" }`,
       generationConfig: {
         temperature: 0,
         maxOutputTokens: 200,
@@ -264,8 +277,9 @@ JSON만 반환합니다. { "date": "", "amount": 0, "description": "" }`,
             date: { type: SchemaType.STRING },
             amount: { type: SchemaType.NUMBER },
             description: { type: SchemaType.STRING },
+            category: { type: SchemaType.STRING },
           },
-          required: ["date", "amount", "description"],
+          required: ["date", "amount", "description", "category"],
         },
       },
       contents,
@@ -290,7 +304,7 @@ JSON만 반환합니다. { "date": "", "amount": 0, "description": "" }`,
   const { data: saved, error: saveError } = await supabase
     .from("expenses")
     .insert(draft)
-    .select("id, created_at, date, amount, description")
+    .select("id, created_at, date, amount, description, category")
     .single();
 
   if (saveError || !saved) {
@@ -304,8 +318,15 @@ JSON만 반환합니다. { "date": "", "amount": 0, "description": "" }`,
     date: saved.date,
     amount: saved.amount,
     description: saved.description,
-    reply: savedMessage(saved),
-    expense: saved,
+    category: normalizeCategory(saved.category),
+    reply: savedMessage({
+      ...saved,
+      category: normalizeCategory(saved.category),
+    }),
+    expense: {
+      ...saved,
+      category: normalizeCategory(saved.category),
+    },
   });
 }
 
@@ -382,5 +403,5 @@ function clarifyMessage(value: {
 function savedMessage(expense: ExpenseDraft) {
   const [, month, day] = expense.date.split("-");
   const amount = expense.amount.toLocaleString("ko-KR");
-  return `${Number(month)}월 ${Number(day)}일 ${expense.description} ${amount}원을 저장했어요!`;
+  return `${Number(month)}월 ${Number(day)}일 ${expense.description} ${amount}원을 ${expense.category}로 저장했어요!`;
 }
