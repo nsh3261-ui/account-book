@@ -123,7 +123,7 @@ export default function Home() {
       <div className="mx-auto flex w-full max-w-lg flex-col px-5 py-12 sm:px-6 sm:py-24">
         <header className="mb-12 sm:mb-16">
           <h1 className="text-[2.5rem] font-semibold leading-tight tracking-tight sm:text-4xl">
-            나의 AI 가계부
+            나의 스마트 가계부
           </h1>
           <p className="mt-3 text-lg text-zinc-500 sm:text-base">
             오늘 쓴 돈을 간단히 기록해 보세요.
